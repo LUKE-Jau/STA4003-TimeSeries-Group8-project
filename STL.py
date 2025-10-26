@@ -14,53 +14,75 @@ warnings.filterwarnings("ignore")
 START_DATE = "2024-08-01"
 DATA_DIR = "./data/BTC_factors"
 
-# PERIOD = 168  # 统一使用 24*7 = 168
-PERIOD = 24
+# 频率到周期的映射（日周期）
+FREQ_TO_PERIOD = {"10m": 144, "1h": 24, "24h": 7}  # 24 * 6  # 24  # 7 days
 
-IMAGE_DIR = f"./data/image_{PERIOD}"
+# 图像和结果按 period 分开存储
+IMAGE_DIR = "./data/image_multi_freq"
 os.makedirs(IMAGE_DIR, exist_ok=True)
+
+
+# ========== 安全前向填充缺失值（不泄露未来）==========
+def forward_fill_with_limit(series, max_gap=5):
+    """
+    用前向填充处理缺失值，但限制最大连续缺失长度
+    """
+    # 先标记连续缺失段
+    is_na = series.isna()
+    # 计算连续缺失长度
+    na_groups = (~is_na).cumsum()
+    na_counts = is_na.groupby(na_groups).transform("sum")
+
+    # 只填充连续缺失 <= max_gap 的段
+    series_filled = series.copy()
+    mask = (is_na) & (na_counts <= max_gap)
+    series_filled[mask] = series_filled[mask].fillna(method="ffill")
+
+    return series_filled
 
 
 # ========== 主函数：处理单个文件 ==========
 def process_single_factor(filepath, category, factor_name, original_frequency):
-    if original_frequency == "24h":
-        print(f"⏭️ Skipping 24h data: {factor_name}")
+    period = FREQ_TO_PERIOD.get(original_frequency)
+    if period is None:
+        print(f"⚠️ Unsupported frequency: {original_frequency} in {factor_name}")
         return None
 
     try:
         df = pd.read_csv(filepath)
         df["date"] = pd.to_datetime(df["datetime"])
         df = df[df["date"] > pd.to_datetime(START_DATE)]
-        df = df.set_index("date")
+        df = df.set_index("date").sort_index()
 
         if factor_name not in df.columns:
             raise ValueError(f"Column '{factor_name}' not found.")
         series = df[factor_name].copy()
-        series = pd.to_numeric(series, errors="coerce").dropna()
+        series = pd.to_numeric(series, errors="coerce")
 
-        if len(series) == 0:
-            raise ValueError("No valid numeric data.")
+        # === 处理缺失值：前向填充（不泄露未来）===
+        # 先确保时间连续（按频率重采样，但不聚合）
+        freq_map = {"10m": "10T", "1h": "1H", "24h": "1D"}
+        pandas_freq = freq_map.get(original_frequency)
+        if pandas_freq:
+            series = series.asfreq(pandas_freq)  # 插入缺失时间点
 
-        # Resample to 1H
-        if original_frequency in ["10m", "1h"]:
-            series = series.resample("1H").mean().dropna()
-        else:
-            raise ValueError(f"Unsupported frequency: {original_frequency}")
+        # 前向填充短缺口（最多5个连续缺失）
+        series = forward_fill_with_limit(series, max_gap=5)
+        series = series.dropna()
 
         if len(series) < 50:
-            raise ValueError("Insufficient data after resampling.")
+            raise ValueError("Insufficient data after cleaning.")
 
-        # STL 分解
-        stl_model = STL(series, period=PERIOD, robust=True)
+        # === STL 分解 ===
+        stl_model = STL(series, period=period, robust=True)
         result = stl_model.fit()
 
-        # === 对齐 STL 成分（避免边界 NaN 导致长度不一致）===
+        # 对齐成分
         observed = result.observed.dropna()
         trend = result.trend.dropna()
         seasonal = result.seasonal.dropna()
         resid = result.resid.dropna()
 
-        # 取共同索引
         common_idx = (
             observed.index.intersection(trend.index)
             .intersection(seasonal.index)
@@ -73,31 +95,26 @@ def process_single_factor(filepath, category, factor_name, original_frequency):
         if len(resid) < 10:
             raise ValueError("Too few residuals after alignment.")
 
-        # === 计算趋势强度 & 季节性强度 ===
-        eps = 1e-12  # 防止除零
+        # === 强度计算 ===
+        eps = 1e-12
         trend_var = np.var(trend)
         seasonal_var = np.var(seasonal)
         resid_var = np.var(resid)
-
         trend_strength = trend_var / (trend_var + resid_var + eps)
         seasonal_strength = seasonal_var / (seasonal_var + resid_var + eps)
 
         # === 保存图像 ===
-        image_path = os.path.join(
-            IMAGE_DIR, f"{factor_name}_{original_frequency}_to_1h.png"
-        )
+        image_path = os.path.join(IMAGE_DIR, f"{factor_name}_{original_frequency}.png")
         fig, axes = plt.subplots(4, 1, figsize=(12, 10))
-        result.observed.plot(
-            ax=axes[0], title=f"{factor_name} ({original_frequency} → 1h)"
-        )
+        result.observed.plot(ax=axes[0], title=f"{factor_name} ({original_frequency})")
         result.trend.plot(ax=axes[1], title="Trend")
-        result.seasonal.plot(ax=axes[2], title=f"Seasonal (Period={PERIOD})")
+        result.seasonal.plot(ax=axes[2], title=f"Seasonal (Period={period})")
         result.resid.plot(ax=axes[3], title="Residuals")
         plt.tight_layout()
         plt.savefig(image_path, dpi=150, bbox_inches="tight")
         plt.close(fig)
 
-        # === 残差统计检验 ===
+        # === 残差检验 ===
         mean_resid = resid.mean()
         std_resid = resid.std()
         skew_resid = stats.skew(resid)
@@ -114,6 +131,7 @@ def process_single_factor(filepath, category, factor_name, original_frequency):
             "factor_name": factor_name,
             "original_frequency": original_frequency,
             "category": category,
+            "period_used": period,
             "trend_strength": trend_strength,
             "seasonal_strength": seasonal_strength,
             "mean_resid": mean_resid,
@@ -158,19 +176,16 @@ def batch_process_factors():
 
             if freq not in ["10m", "1h", "24h"]:
                 continue
-            if freq == "24h":
-                print(f"⏭️ Skipping 24h file: {filename}")
-                continue
 
             filepath = os.path.join(category_path, filename)
-            print(f"✅ Processing: {factor_name} (original: {freq})")
+            print(f"✅ Processing: {factor_name} (freq: {freq})")
 
             result = process_single_factor(filepath, category, factor_name, freq)
             if result:
                 results.append(result)
 
     summary_df = pd.DataFrame(results)
-    summary_csv_path = f"./data/analysis_summary_{PERIOD}_1h.csv"
+    summary_csv_path = "./data/analysis_summary_multi_freq.csv"
     summary_df.to_csv(summary_csv_path, index=False)
     print(f"\n📊 Summary saved to: {summary_csv_path}")
     print(f"📈 Total valid factors processed: {len(summary_df)}")
@@ -182,18 +197,3 @@ def batch_process_factors():
 if __name__ == "__main__":
     summary = batch_process_factors()
     print("\n✅ All done!")
-    if not summary.empty:
-        print("\nTop results by seasonal strength:")
-        print(
-            summary[
-                [
-                    "factor_name",
-                    "original_frequency",
-                    "trend_strength",
-                    "seasonal_strength",
-                    "lb_pvalue",
-                ]
-            ]
-            .sort_values("seasonal_strength", ascending=False)
-            .head()
-        )
