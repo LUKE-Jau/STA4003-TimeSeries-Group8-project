@@ -11,18 +11,15 @@ import re
 
 warnings.filterwarnings("ignore")
 
-# ========== 配置参数 ==========
 START_DATE = "2023-01-01"
 DATA_DIR = "./data/BTC_factors"
 
-# 注意：所有数据最终转为日频，统一使用 period=7
 IMAGE_DIR = "./data/selected_factor_imaged"
 os.makedirs(IMAGE_DIR, exist_ok=True)
 
 TRAIN_RATIO = 0.8  # 使用前80%作为训练集
 
 
-# ========== 安全前向填充缺失值（不泄露未来）==========
 def forward_fill_with_limit(series, max_gap=5):
     is_na = series.isna()
     na_groups = (~is_na).cumsum()
@@ -35,7 +32,6 @@ def forward_fill_with_limit(series, max_gap=5):
     return series_filled
 
 
-# ========== STL乘法分解函数 ==========
 def stl_multiplicative_decomposition(series, period):
     min_val = series.min()
     if min_val <= 0:
@@ -50,7 +46,7 @@ def stl_multiplicative_decomposition(series, period):
     observed = np.exp(result.observed)
     trend = np.exp(result.trend)
     seasonal = np.exp(result.seasonal)
-    resid = np.exp(result.resid)
+    # resid = np.exp(result.resid)
     resid_corrected = observed / (trend * seasonal)
 
     return {
@@ -62,17 +58,14 @@ def stl_multiplicative_decomposition(series, period):
     }
 
 
-# ========== 主函数：处理单个文件 ==========
 def process_single_factor(
     filepath, category, factor_name, original_frequency, use_multiplicative=False
 ):
-    # 所有频率最终转为日频，使用 period=7
     if original_frequency not in ["10m", "1h", "24h"]:
         print(f"⚠️ Unsupported frequency: {original_frequency} in {factor_name}")
         return None
 
-    period = 7  # 日频数据使用周季节性
-
+    period = 7
     try:
         df = pd.read_csv(filepath)
         df["date"] = pd.to_datetime(df["datetime"])
@@ -84,7 +77,6 @@ def process_single_factor(
         series = df[factor_name].copy()
         series = pd.to_numeric(series, errors="coerce")
 
-        # === 处理缺失值：前向填充 ===
         freq_map = {"10m": "10T", "1h": "1H", "24h": "1D"}
         pandas_freq = freq_map.get(original_frequency)
         if pandas_freq:
@@ -96,7 +88,6 @@ def process_single_factor(
         if len(series) < 50:
             raise ValueError("Insufficient data after cleaning.")
 
-        # === 转换为日频：对每个自然日取均值 ===
         if original_frequency in ["10m", "1h"]:
             daily_series = series.groupby(series.index.date).mean()
             daily_series.index = pd.to_datetime(daily_series.index)
@@ -108,14 +99,12 @@ def process_single_factor(
         if len(series) < 50:
             raise ValueError("Insufficient data after daily aggregation.")
 
-        # === 划分训练集：前80% ===
         n_total = len(series)
         n_train = int(n_total * TRAIN_RATIO)
         if n_train < 30:
             raise ValueError("Too few samples in training set (<30).")
         train_series = series.iloc[:n_train]
 
-        # === STL 分解（仅用训练集）===
         if use_multiplicative:
             decomposition_result = stl_multiplicative_decomposition(
                 train_series, period
@@ -132,7 +121,6 @@ def process_single_factor(
             seasonal = result.seasonal.dropna()
             resid = result.resid.dropna()
 
-        # 对齐索引
         common_idx = (
             observed.index.intersection(trend.index)
             .intersection(seasonal.index)
@@ -145,7 +133,6 @@ def process_single_factor(
         if len(resid) < 10:
             raise ValueError("Too few residuals after alignment.")
 
-        # === 强度计算 ===
         eps = 1e-12
         if use_multiplicative:
             log_trend = np.log(trend)
@@ -163,7 +150,6 @@ def process_single_factor(
             trend_strength = trend_var / (trend_var + resid_var + eps)
             seasonal_strength = seasonal_var / (seasonal_var + resid_var + eps)
 
-        # === 保存图像（含 ACF/PACF of ORIGINAL series, not residuals）===
         decomposition_type = "multiplicative" if use_multiplicative else "additive"
         image_path = os.path.join(
             IMAGE_DIR, f"{factor_name}_{display_freq}_{decomposition_type}.png"
@@ -184,7 +170,7 @@ def process_single_factor(
         resid.plot(ax=axes[3], title="Residuals (Training Set)")
 
         # 5 & 6. ACF/PACF of ORIGINAL TRAINING SERIES (not residuals)
-        original_series_for_acf = train_series  # 这是原始日频训练集
+        original_series_for_acf = train_series
         max_lag = min(350, len(original_series_for_acf) // 2 - 1)
         if max_lag > 0:
             plot_acf(
@@ -214,7 +200,6 @@ def process_single_factor(
         plt.savefig(image_path, dpi=150, bbox_inches="tight")
         plt.close(fig)
 
-        # === 残差检验（仅训练集）===
         mean_resid = resid.mean()
         std_resid = resid.std()
         skew_resid = stats.skew(resid)
@@ -254,7 +239,6 @@ def process_single_factor(
         return None
 
 
-# ========== 批量处理 ==========
 def batch_process_factors(use_multiplicative=False):
     results = []
 
@@ -305,7 +289,6 @@ def batch_process_factors(use_multiplicative=False):
     return summary_df
 
 
-# ========== 处理指定因子列表的函数 ==========
 def process_selected_factors(factor_list, use_multiplicative=False):
     results = []
     processed_factors = set()
@@ -362,7 +345,7 @@ def process_selected_factors(factor_list, use_multiplicative=False):
     return summary_df
 
 
-# ========== 运行 ==========
+# ========== run ==========
 if __name__ == "__main__":
 
     # 批量处理所有因子（加法分解）

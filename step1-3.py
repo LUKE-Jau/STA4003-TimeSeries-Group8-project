@@ -1,12 +1,10 @@
+# Step 1~3 in Part 1: STL Decomposition and analysis
 import pandas as pd
 import matplotlib.pyplot as plt
 from statsmodels.tsa.seasonal import STL
 from statsmodels.stats.diagnostic import acorr_ljungbox
-
-# 加入的packages
-from sklearn.linear_model import LinearRegression 
+from sklearn.linear_model import LinearRegression
 from statsmodels.tsa.stattools import acf
-
 from scipy import stats
 import numpy as np
 import os
@@ -15,29 +13,26 @@ import re
 
 warnings.filterwarnings("ignore")
 
-# ========== 配置参数 ==========
+# ========== Parameters ==========
 START_DATE = "2024-08-01"
 DATA_DIR = "BTC factors"
 
-# 频率到周期的映射（日周期）
+# Period-to-frequency
 FREQ_TO_PERIOD = {"10m": 144, "1h": 24, "24h": 7}  # 24 * 6  # 24  # 7 days
 
-# 图像和结果按 period 分开存储
+# saved path
 IMAGE_DIR = "./data/image_multi_freq"
 os.makedirs(IMAGE_DIR, exist_ok=True)
 
-# ========== 安全前向填充缺失值（不泄露未来）==========
+
+# ========== forward fill ==========
 def forward_fill_with_limit(series, max_gap=5):
     """
     用前向填充处理缺失值，但限制最大连续缺失长度
     """
-    # 先标记连续缺失段
     is_na = series.isna()
-    # 计算连续缺失长度
     na_groups = (~is_na).cumsum()
     na_counts = is_na.groupby(na_groups).transform("sum")
-
-    # 只填充连续缺失 <= max_gap 的段
     series_filled = series.copy()
     mask = (is_na) & (na_counts <= max_gap)
     series_filled[mask] = series_filled[mask].fillna(method="ffill")
@@ -45,7 +40,7 @@ def forward_fill_with_limit(series, max_gap=5):
     return series_filled
 
 
-# ========== 主函数：处理单个文件 ==========
+# ========== main function: process single file ==========
 def process_single_factor(filepath, category, factor_name, original_frequency):
     period = FREQ_TO_PERIOD.get(original_frequency)
     if period is None:
@@ -63,25 +58,21 @@ def process_single_factor(filepath, category, factor_name, original_frequency):
         series = df[factor_name].copy()
         series = pd.to_numeric(series, errors="coerce")
 
-        # === 处理缺失值：前向填充（不泄露未来）===
-        # 先确保时间连续（按频率重采样，但不聚合）
         freq_map = {"10m": "10T", "1h": "1H", "24h": "1D"}
         pandas_freq = freq_map.get(original_frequency)
         if pandas_freq:
-            series = series.asfreq(pandas_freq)  # 插入缺失时间点
+            series = series.asfreq(pandas_freq)
 
-        # 前向填充短缺口（最多5个连续缺失）
         series = forward_fill_with_limit(series, max_gap=5)
         series = series.dropna()
 
         if len(series) < 50:
             raise ValueError("Insufficient data after cleaning.")
 
-        # === STL 分解 ===
+        # === STL decompose ===
         stl_model = STL(series, period=period, robust=True)
         result = stl_model.fit()
 
-        # 对齐成分
         observed = result.observed.dropna()
         trend = result.trend.dropna()
         seasonal = result.seasonal.dropna()
@@ -99,8 +90,8 @@ def process_single_factor(filepath, category, factor_name, original_frequency):
         if len(resid) < 10:
             raise ValueError("Too few residuals after alignment.")
 
-        # === 强度计算 ===
-        # 趋势与季节性强度
+        # === calculate strength ===
+        # tend and seasonal
         eps = 1e-12
         trend_var = np.var(trend)
         seasonal_var = np.var(seasonal)
@@ -108,55 +99,62 @@ def process_single_factor(filepath, category, factor_name, original_frequency):
         trend_strength = trend_var / (trend_var + resid_var + eps)
         seasonal_strength = seasonal_var / (seasonal_var + resid_var + eps)
 
-        # === 剩余特征分析（Feature Analysis）===
-        # 趋势斜率（线性拟合）
+        # Reminder part(Feature Analysis)
+        # slope (Linearlization)
         t = (trend.index - trend.index[0]).total_seconds().values.reshape(-1, 1) / 3600
         model = LinearRegression().fit(t, trend.values)
         trend_slope = model.coef_[0]
 
-        # ACF 峰值（检查周期性）
-        nlags = min(36, len(series)//2)  # 增加到36个滞后点
+        # ACF peak
+        nlags = min(36, len(series) // 2)
         acf_values = acf(series, nlags=nlags, fft=True)
-        acf_peak = np.max(np.abs(acf_values[1:]))  # 取绝对值最大峰
+        acf_peak = np.max(np.abs(acf_values[1:]))
 
-        # === 保存图像（添加版） ===
+        # saved as image
         image_path = os.path.join(IMAGE_DIR, f"{factor_name}_{original_frequency}.png")
         fig, axes = plt.subplots(6, 1, figsize=(12, 10))
-        
-        # STL 分解图（原始分解部分）    
+
+        # STL decompositioin graph
         result.observed.plot(ax=axes[0], title=f"{factor_name} ({original_frequency})")
         result.trend.plot(ax=axes[1], title="Trend")
         result.seasonal.plot(ax=axes[2], title=f"Seasonal (Period={period})")
         result.resid.plot(ax=axes[3], title="Residuals")
 
-        # 趋势斜率图
-        axes[4].plot(trend.index, trend.values, label="Trend", color="blue", linewidth=2)
-        trend_fit = model.predict(t)
-        axes[4].plot(trend.index, model.predict(t), "--", color="red",
-                     label=f"Fit (slope={trend_slope:.5f})", linewidth=2)
+        # slope of tendency
+        axes[4].plot(
+            trend.index, trend.values, label="Trend", color="blue", linewidth=2
+        )
+        # trend_fit = model.predict(t)
+        axes[4].plot(
+            trend.index,
+            model.predict(t),
+            "--",
+            color="red",
+            label=f"Fit (slope={trend_slope:.5f})",
+            linewidth=2,
+        )
         axes[4].set_title("Trend Slope (Linear Fit)")
         axes[4].legend()
-        axes[4].tick_params(axis='x', rotation=45)
+        axes[4].tick_params(axis="x", rotation=45)
 
-        # ACF 图
+        # ACF graph
         lags = np.arange(len(acf_values))
         axes[5].stem(lags, acf_values)
         axes[5].set_title(f"ACF (Peak={acf_peak:.3f})")
         axes[5].set_xlabel("Lag")
         axes[5].set_ylabel("Autocorrelation")
-        
+
         max_lag = len(acf_values) - 1
         if max_lag > 20:
-            axes[5].set_xticks(range(0, max_lag+1, max(1, max_lag//6)))
+            axes[5].set_xticks(range(0, max_lag + 1, max(1, max_lag // 6)))
         else:
-            axes[5].set_xticks(range(0, max_lag+1))
-
+            axes[5].set_xticks(range(0, max_lag + 1))
 
         plt.tight_layout()
         plt.savefig(image_path, dpi=150, bbox_inches="tight")
         plt.close(fig)
 
-        # === 残差检验 ===
+        # residual test
         mean_resid = resid.mean()
         std_resid = resid.std()
         skew_resid = stats.skew(resid)
@@ -193,7 +191,7 @@ def process_single_factor(filepath, category, factor_name, original_frequency):
         return None
 
 
-# ========== 批量处理 ==========
+# ========== batch process ==========
 def batch_process_factors():
     results = []
 
@@ -235,7 +233,7 @@ def batch_process_factors():
     return summary_df
 
 
-# ========== 运行 ==========
+# ========== run ==========
 if __name__ == "__main__":
     summary = batch_process_factors()
     print("\n✅ All done!")
