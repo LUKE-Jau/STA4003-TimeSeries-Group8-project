@@ -2,6 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from statsmodels.tsa.seasonal import STL
 from statsmodels.stats.diagnostic import acorr_ljungbox
+from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from scipy import stats
 import numpy as np
 import os
@@ -14,26 +15,19 @@ warnings.filterwarnings("ignore")
 START_DATE = "2023-01-01"
 DATA_DIR = "./data/BTC_factors"
 
-# 频率到周期的映射（日周期）
-FREQ_TO_PERIOD = {"10m": 144, "1h": 24, "24h": 7}  # 24 * 6  # 24  # 7 days
-
-# 图像和结果按 period 分开存储
-IMAGE_DIR = "./data/image_multi_freq"
+# 注意：所有数据最终转为日频，统一使用 period=7
+IMAGE_DIR = "./data/selected_factor_imaged"
 os.makedirs(IMAGE_DIR, exist_ok=True)
+
+TRAIN_RATIO = 0.8  # 使用前80%作为训练集
 
 
 # ========== 安全前向填充缺失值（不泄露未来）==========
 def forward_fill_with_limit(series, max_gap=5):
-    """
-    用前向填充处理缺失值，但限制最大连续缺失长度
-    """
-    # 先标记连续缺失段
     is_na = series.isna()
-    # 计算连续缺失长度
     na_groups = (~is_na).cumsum()
     na_counts = is_na.groupby(na_groups).transform("sum")
 
-    # 只填充连续缺失 <= max_gap 的段
     series_filled = series.copy()
     mask = (is_na) & (na_counts <= max_gap)
     series_filled[mask] = series_filled[mask].fillna(method="ffill")
@@ -43,32 +37,20 @@ def forward_fill_with_limit(series, max_gap=5):
 
 # ========== STL乘法分解函数 ==========
 def stl_multiplicative_decomposition(series, period):
-    """
-    对时间序列进行乘法STL分解（通过log变换实现）
-    """
-    # 确保所有值为正数（用于log变换）
     min_val = series.min()
     if min_val <= 0:
-        # 如果有负值或零，平移使其为正
         series_shifted = series - min_val + 1e-6
     else:
         series_shifted = series.copy()
 
-    # 对数据取log
     log_series = np.log(series_shifted)
-
-    # 进行STL分解
     stl_model = STL(log_series, period=period, robust=True)
     result = stl_model.fit()
 
-    # 指数变换回原尺度
     observed = np.exp(result.observed)
     trend = np.exp(result.trend)
     seasonal = np.exp(result.seasonal)
     resid = np.exp(result.resid)
-
-    # 重新构建，确保 observed = trend * seasonal * resid
-    # （由于数值精度，可能略有偏差，这里重新计算resid）
     resid_corrected = observed / (trend * seasonal)
 
     return {
@@ -76,7 +58,7 @@ def stl_multiplicative_decomposition(series, period):
         "trend": trend,
         "seasonal": seasonal,
         "resid": resid_corrected,
-        "original_result": result,  # 保留原始结果用于其他分析
+        "original_result": result,
     }
 
 
@@ -84,10 +66,12 @@ def stl_multiplicative_decomposition(series, period):
 def process_single_factor(
     filepath, category, factor_name, original_frequency, use_multiplicative=False
 ):
-    period = FREQ_TO_PERIOD.get(original_frequency)
-    if period is None:
+    # 所有频率最终转为日频，使用 period=7
+    if original_frequency not in ["10m", "1h", "24h"]:
         print(f"⚠️ Unsupported frequency: {original_frequency} in {factor_name}")
         return None
+
+    period = 7  # 日频数据使用周季节性
 
     try:
         df = pd.read_csv(filepath)
@@ -100,39 +84,55 @@ def process_single_factor(
         series = df[factor_name].copy()
         series = pd.to_numeric(series, errors="coerce")
 
-        # === 处理缺失值：前向填充（不泄露未来）===
-        # 先确保时间连续（按频率重采样，但不聚合）
+        # === 处理缺失值：前向填充 ===
         freq_map = {"10m": "10T", "1h": "1H", "24h": "1D"}
         pandas_freq = freq_map.get(original_frequency)
         if pandas_freq:
-            series = series.asfreq(pandas_freq)  # 插入缺失时间点
+            series = series.asfreq(pandas_freq)
 
-        # 前向填充短缺口（最多5个连续缺失）
         series = forward_fill_with_limit(series, max_gap=5)
         series = series.dropna()
 
         if len(series) < 50:
             raise ValueError("Insufficient data after cleaning.")
 
-        # === STL 分解 ===
+        # === 转换为日频：对每个自然日取均值 ===
+        if original_frequency in ["10m", "1h"]:
+            daily_series = series.groupby(series.index.date).mean()
+            daily_series.index = pd.to_datetime(daily_series.index)
+            series = daily_series
+            display_freq = "24h (aggregated)"
+        else:
+            display_freq = "24h"
+
+        if len(series) < 50:
+            raise ValueError("Insufficient data after daily aggregation.")
+
+        # === 划分训练集：前80% ===
+        n_total = len(series)
+        n_train = int(n_total * TRAIN_RATIO)
+        if n_train < 30:
+            raise ValueError("Too few samples in training set (<30).")
+        train_series = series.iloc[:n_train]
+
+        # === STL 分解（仅用训练集）===
         if use_multiplicative:
-            # 乘法分解
-            decomposition_result = stl_multiplicative_decomposition(series, period)
+            decomposition_result = stl_multiplicative_decomposition(
+                train_series, period
+            )
             observed = decomposition_result["observed"].dropna()
             trend = decomposition_result["trend"].dropna()
             seasonal = decomposition_result["seasonal"].dropna()
             resid = decomposition_result["resid"].dropna()
         else:
-            # 加法分解
-            stl_model = STL(series, period=period, robust=True)
+            stl_model = STL(train_series, period=period, robust=True)
             result = stl_model.fit()
-
-            # 对齐成分
             observed = result.observed.dropna()
             trend = result.trend.dropna()
             seasonal = result.seasonal.dropna()
             resid = result.resid.dropna()
 
+        # 对齐索引
         common_idx = (
             observed.index.intersection(trend.index)
             .intersection(seasonal.index)
@@ -148,11 +148,9 @@ def process_single_factor(
         # === 强度计算 ===
         eps = 1e-12
         if use_multiplicative:
-            # 对于乘法分解，使用log尺度的方差来计算强度
             log_trend = np.log(trend)
             log_seasonal = np.log(seasonal)
             log_resid = np.log(resid)
-
             trend_var = np.var(log_trend)
             seasonal_var = np.var(log_seasonal)
             resid_var = np.var(log_resid)
@@ -165,76 +163,66 @@ def process_single_factor(
             trend_strength = trend_var / (trend_var + resid_var + eps)
             seasonal_strength = seasonal_var / (seasonal_var + resid_var + eps)
 
-        # === 保存图像（含 ACF/PACF）===
-        from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
-
+        # === 保存图像（含 ACF/PACF of ORIGINAL series, not residuals）===
         decomposition_type = "multiplicative" if use_multiplicative else "additive"
         image_path = os.path.join(
-            IMAGE_DIR, f"{factor_name}_{original_frequency}_{decomposition_type}.png"
+            IMAGE_DIR, f"{factor_name}_{display_freq}_{decomposition_type}.png"
         )
 
-        # 创建 6 个子图：observed, trend, seasonal, resid, ACF, PACF
         fig, axes = plt.subplots(6, 1, figsize=(12, 14))
 
-        # 1. Observed
-        if use_multiplicative:
-            observed.plot(
-                ax=axes[0],
-                title=f"{factor_name} ({original_frequency}) - {decomposition_type.capitalize()} Decomposition",
-            )
-        else:
-            result.observed.plot(
-                ax=axes[0],
-                title=f"{factor_name} ({original_frequency}) - {decomposition_type.capitalize()} Decomposition",
-            )
-
+        # 1. Observed (decomposed)
+        observed.plot(
+            ax=axes[0],
+            title=f"{factor_name} ({display_freq}) - {decomposition_type.capitalize()} Decomposition (Train: {TRAIN_RATIO*100:.0f}%)",
+        )
         # 2. Trend
-        if use_multiplicative:
-            trend.plot(ax=axes[1], title="Trend")
-        else:
-            result.trend.plot(ax=axes[1], title="Trend")
-
+        trend.plot(ax=axes[1], title="Trend")
         # 3. Seasonal
-        if use_multiplicative:
-            seasonal.plot(ax=axes[2], title=f"Seasonal (Period={period})")
-        else:
-            result.seasonal.plot(ax=axes[2], title=f"Seasonal (Period={period})")
-
+        seasonal.plot(ax=axes[2], title=f"Seasonal (Period={period})")
         # 4. Residuals
-        if use_multiplicative:
-            resid.plot(ax=axes[3], title="Residuals")
+        resid.plot(ax=axes[3], title="Residuals (Training Set)")
+
+        # 5 & 6. ACF/PACF of ORIGINAL TRAINING SERIES (not residuals)
+        original_series_for_acf = train_series  # 这是原始日频训练集
+        max_lag = min(350, len(original_series_for_acf) // 2 - 1)
+        if max_lag > 0:
+            plot_acf(
+                original_series_for_acf,
+                lags=max_lag,
+                ax=axes[4],
+                title="ACF of Original Series (Training Set)",
+            )
+            plot_pacf(
+                original_series_for_acf,
+                lags=max_lag,
+                ax=axes[5],
+                title="PACF of Original Series (Training Set)",
+            )
         else:
-            result.resid.plot(ax=axes[3], title="Residuals")
-
-        # 5. ACF of residuals
-        plot_acf(
-            resid,
-            lags=min(30, len(resid) // 2 - 1),
-            ax=axes[4],
-            title="ACF of Residuals",
-        )
-
-        # 6. PACF of residuals
-        plot_pacf(
-            resid,
-            lags=min(30, len(resid) // 2 - 1),
-            ax=axes[5],
-            title="PACF of Residuals",
-        )
+            for i, name in enumerate(["ACF", "PACF"], start=4):
+                axes[i].text(
+                    0.5,
+                    0.5,
+                    f"Insufficient data for {name}",
+                    transform=axes[i].transAxes,
+                    ha="center",
+                )
+                axes[i].set_title(f"{name} of Original Series (Training Set)")
 
         plt.tight_layout()
         plt.savefig(image_path, dpi=150, bbox_inches="tight")
         plt.close(fig)
 
-        # === 残差检验 ===
+        # === 残差检验（仅训练集）===
         mean_resid = resid.mean()
         std_resid = resid.std()
         skew_resid = stats.skew(resid)
         kurtosis_resid = stats.kurtosis(resid)
 
         lb_test = acorr_ljungbox(resid, lags=min(20, len(resid) // 2), return_df=True)
-        lb_pvalue = lb_test["lb_pvalue"].iloc[-1]
-        passed_white_noise = lb_pvalue > 0.05
+        lb_pvalue = lb_test["lb_pvalue"].iloc[-1] if not lb_test.empty else np.nan
+        passed_white_noise = lb_pvalue > 0.05 if not np.isnan(lb_pvalue) else False
 
         _, normal_pvalue = stats.normaltest(resid)
         passed_normality = normal_pvalue > 0.05
@@ -242,6 +230,7 @@ def process_single_factor(
         return {
             "factor_name": factor_name,
             "original_frequency": original_frequency,
+            "display_frequency": display_freq,
             "category": category,
             "period_used": period,
             "decomposition_type": decomposition_type,
@@ -255,7 +244,8 @@ def process_single_factor(
             "normal_pvalue": normal_pvalue,
             "passed_white_noise": passed_white_noise,
             "passed_normality": passed_normality,
-            "final_length": len(series),
+            "final_length_total": n_total,
+            "train_length": len(train_series),
             "image_path": image_path,
         }
 
@@ -317,18 +307,8 @@ def batch_process_factors(use_multiplicative=False):
 
 # ========== 处理指定因子列表的函数 ==========
 def process_selected_factors(factor_list, use_multiplicative=False):
-    """
-    处理并绘图指定的因子列表
-
-    Parameters:
-    factor_list: list of str, 要处理的因子名称列表
-    use_multiplicative: bool, 是否使用乘法分解
-
-    Returns:
-    summary_df: DataFrame, 包含所选因子的统计指标汇总
-    """
     results = []
-    processed_factors = set()  # 用于跟踪已处理的因子，避免重复
+    processed_factors = set()
 
     for category in os.listdir(DATA_DIR):
         category_path = os.path.join(DATA_DIR, category)
@@ -351,7 +331,6 @@ def process_selected_factors(factor_list, use_multiplicative=False):
             if freq not in ["10m", "1h", "24h"]:
                 continue
 
-            # 检查这个因子是否在我们想要处理的列表中
             if factor_name in factor_list and factor_name not in processed_factors:
                 filepath = os.path.join(category_path, filename)
                 print(
@@ -369,12 +348,10 @@ def process_selected_factors(factor_list, use_multiplicative=False):
                     results.append(result)
                     processed_factors.add(factor_name)
 
-    # 检查是否有因子没有找到
     not_found = set(factor_list) - processed_factors
     if not_found:
         print(f"\n⚠️ The following factors were not found: {list(not_found)}")
 
-    # 保存结果
     decomposition_type = "multiplicative" if use_multiplicative else "additive"
     selected_summary_path = f"./data/selected_factors_analysis_{decomposition_type}.csv"
     summary_df = pd.DataFrame(results)
@@ -391,10 +368,6 @@ if __name__ == "__main__":
     # 批量处理所有因子（加法分解）
     # print("=== Processing all factors with additive decomposition ===")
     # summary_additive = batch_process_factors(use_multiplicative=False)
-
-    # # 批量处理所有因子（乘法分解）
-    # print("\n=== Processing all factors with multiplicative decomposition ===")
-    # summary_multiplicative = batch_process_factors(use_multiplicative=True)
 
     print("\n=== Processing selected factors ===")
     selected_factors = ["active_3m_6m"]  # 示例因子列表
