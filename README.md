@@ -7,7 +7,7 @@ This project involves various time series analysis methods applied to Bitcoin ac
 2. [Phase 2 - Model](#phase-2---model)
    - [AR(2) Forecasting for BTC Active Wallets](#ar2-forecasting-for-btc-active-wallets)
    - [SARIMA Forecasting](#sarima-forecasting)
-   - [Bitcoin On-Chain Factor Forecasting with ARIMA](#bitcoin-on-chain-factor-forecasting-with-arima)
+   - [ARIMA](#ARIMA)
    - [ARMA Sensitivity Analysis](#arma-sensitivity-analysis)
 3. [Dependencies](#dependencies)
 4. [Usage Instructions](#usage-instructions)
@@ -57,7 +57,7 @@ This section involves preprocessing and modeling using SARIMA (Seasonal ARIMA), 
 - **Metrics & Diagnostics**: Computes RMSE, MAE, MAPE, MASE, R², AIC, BIC, Ljung-Box, and normality tests.
 - **Visualization**: Saves plots for residual diagnostics, model fit, and forecasts.
 
-
+### ARIMA
 This project implements an ARIMA-based forecasting pipeline using a daily time series.
 
 ## 1. Workflow
