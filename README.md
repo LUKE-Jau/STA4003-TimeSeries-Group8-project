@@ -81,4 +81,4 @@ This project implements an ARIMA-based forecasting pipeline using a daily time s
    - RMSE  
    - MAE  
    - MAPE  
-   - MASE (using naïve forecast on the training set)
+   - MASE
