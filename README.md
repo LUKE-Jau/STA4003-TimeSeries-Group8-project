@@ -8,7 +8,6 @@ This project involves various time series analysis methods applied to Bitcoin ac
    - [AR(2) Forecasting for BTC Active Wallets](#ar2-forecasting-for-btc-active-wallets)
    - [SARIMA Forecasting](#sarima-forecasting)
    - [ARIMA](#ARIMA)
-   - [ARMA Sensitivity Analysis](#arma-sensitivity-analysis)
 3. [Dependencies](#dependencies)
 4. [Usage Instructions](#usage-instructions)
 
