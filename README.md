@@ -59,8 +59,6 @@ This section involves preprocessing and modeling using SARIMA (Seasonal ARIMA), 
 ### ARIMA
 This project implements an ARIMA-based forecasting pipeline using a daily time series.
 
-## 1. Workflow
-
 1. **Train–Test Split**  
    The dataset is split 80/20 into an initial training set and a test set.
 
