@@ -57,37 +57,31 @@ This section involves preprocessing and modeling using SARIMA (Seasonal ARIMA), 
 - **Metrics & Diagnostics**: Computes RMSE, MAE, MAPE, MASE, R², AIC, BIC, Ljung-Box, and normality tests.
 - **Visualization**: Saves plots for residual diagnostics, model fit, and forecasts.
 
-### Bitcoin On-Chain Factor Forecasting with ARIMA
-This part forecasts Bitcoin on-chain factors using the ARIMA model with daily aggregated data.
 
-#### Features:
-- **Data**: Hourly raw data resampled to daily frequency (2023 - Mid 2025).
-- **Model Selection**: Grid search for ARIMA(p, 0, q) with p, q ∈ {0, 1, 2, 3, 4}, evaluated by AIC, BIC, RMSE, MAE, MAPE, MASE.
-- **Best Model**: ARIMA(4, 0, 1) — no differencing needed.
+This project implements an ARIMA-based forecasting pipeline using a daily time series.
 
-#### Key Finding:
-Differencing (e.g., ARIMA(4, 1, 1)) leads to flat, uninformative forecasts, confirming that d=0 is optimal.
+## 1. Workflow
 
-### ARMA Sensitivity Analysis
-This section explores the sensitivity of the ARMA model's performance based on hyperparameter tuning.
+1. **Train–Test Split**  
+   The dataset is split 80/20 into an initial training set and a test set.
 
-#### Steps:
-1. **Data Preprocessing**: Lagged variables are created, and missing values are handled.
-2. **Visualization**: Interactive line plots visualize the relationship between active supply factors and their lagged values.
-3. **Modeling**: ARMA models are fitted, and their performance is evaluated using AIC and BIC.
-4. **Hyperparameter Sensitivity**: Systematically tests different values for AR (`p`) and MA (`q`) orders and evaluates model performance.
-5. **Residual Analysis**: Checks for patterns, autocorrelation, and heteroscedasticity in the residuals.
+2. **Model Selection (Grid Search)**  
+   Since ARIMA requires stationarity, differencing is fixed at **d = 1**.  
+   We search over:
+   - p = 0–5  
+   - q = 0–5  
+   The combination with the lowest AIC on the initial training set is selected as the final model order.
 
-## Dependencies
-Ensure you have the following Python libraries installed:
-- Python 3.8+
-- pandas
-- numpy
-- matplotlib
-- statsmodels
-- scikit-learn
-- plotly (for visualizations)
+3. **Rolling (Expanding) Forecasting**  
+   Using the selected (p,1,q), we perform one-step-ahead forecasting:
+   - Fit the model on the current training window  
+   - Predict the next data point  
+   - Append the true value into the training set  
+   - Repeat until all test observations are predicted  
 
-Install dependencies via pip:
-```bash
-pip install pandas numpy matplotlib statsmodels scikit-learn plotly
+4. **Evaluation Metrics**  
+   We compute:
+   - RMSE  
+   - MAE  
+   - MAPE  
+   - MASE (using naïve forecast on the training set)
