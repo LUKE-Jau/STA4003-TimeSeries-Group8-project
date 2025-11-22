@@ -14,7 +14,8 @@ from statsmodels.tsa.stattools import acf, adfuller
 warnings.filterwarnings("ignore")
 
 # ========== 配置参数 ==========
-START_DATE = "2023-01-01"  # 过滤起始日期
+START_DATE = "2021-01-01"  # 过滤起始日期
+END_DATE   = "2024-07-19"      # 过滤结束日期（含当天整日）
 PERIOD = 7  # 日频率的周期（假设周季节性，7 天）
 NLAGS_ACF = 20  # 计算残差 ACF 的最大滞后阶数
 
@@ -54,8 +55,13 @@ def process_return_stl(filepath: Path):
             errors="coerce",
         )
         df = df.dropna(subset=["date"])
-        df = df[df["date"] >= pd.to_datetime(START_DATE, utc=True)]
+
+        start_dt = pd.to_datetime(START_DATE, utc=True)
+        end_exclusive = pd.to_datetime(END_DATE, utc=True) + pd.Timedelta(days=1)
+
+        df = df[(df["date"] >= start_dt) & (df["date"] < end_exclusive)]
         df = df.set_index("date").sort_index()
+
 
         # ---------------------- Resample 到 Daily ----------------------
         daily_data = (
