@@ -8,8 +8,6 @@ This project involves various time series analysis methods applied to Bitcoin ac
    - [AR(2) Forecasting for BTC Active Wallets](#ar2-forecasting-for-btc-active-wallets)
    - [SARIMA Forecasting](#sarima-forecasting)
    - [ARIMA](#ARIMA)
-3. [Dependencies](#dependencies)
-4. [Usage Instructions](#usage-instructions)
 
 ## Phase 1 - Decomposition, Feature Analysis & Factor Filtering
 In this phase, we perform an analysis of Bitcoin price returns and factor filtering using decomposition methods such as STL, ACF, and PACF.
