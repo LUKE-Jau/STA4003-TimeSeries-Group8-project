@@ -18,7 +18,7 @@ In this phase, we perform an analysis of Bitcoin price returns and factor filter
 
 ## Phase 2 - Model
 
-Benchmark Models
+##Benchmark Models
 ==============================================
 
 This notebook implements and evaluates three basic time series forecasting methods:
