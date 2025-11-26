@@ -5,8 +5,8 @@ This project involves various time series analysis methods applied to Bitcoin ac
 ## Table of Contents
 1. [Phase 1 - Decomposition, Feature Analysis & Factor Filtering](#phase-1-decomposition-feature-analysis--factor-filtering)
 2. [Phase 2 - Model](#phase-2---model)
-   - [AR(2) Forecasting for BTC Active Wallets](#ar2-forecasting-for-btc-active-wallets)
-   - [SARIMA Forecasting](#sarima-forecasting)
+   - [Benchmark Models]
+   - [SARIMA Seasonal Analysis]
    - [ARIMA](#ARIMA)
 
 ## Phase 1 - Decomposition, Feature Analysis & Factor Filtering
@@ -47,7 +47,7 @@ This notebook implements and evaluates three basic time series forecasting metho
 ## Usage:
 Run cells sequentially to see the performance comparison of different benchmark models.
 
-# SARIMA Seasonal Analysis Project
+# SARIMA Seasonal Analysis
 
 ## Project Overview
 This project uses the SARIMA model to perform time series analysis and seasonal pattern identification on BTC hourly relative profit data.
