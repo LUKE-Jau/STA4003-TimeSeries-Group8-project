@@ -77,7 +77,7 @@ Using `pmdarima` and `statsmodels` libraries:
 - Model training and validation
 
 
-### ARIMA
+# ARIMA
 This project implements an ARIMA-based forecasting pipeline using a daily time series.
 
 1. **Train–Test Split**  
