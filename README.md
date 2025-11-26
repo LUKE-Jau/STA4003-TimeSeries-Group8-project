@@ -1,12 +1,12 @@
 # STA4003 - Time Series Group 8 Project
 
-This project involves various time series analysis methods applied to Bitcoin active wallet data. It includes data preprocessing, feature analysis, factor filtering, and model forecasting using ARIMA, SARIMA, and ARMA models.
+This project involves various time series analysis methods applied to Bitcoin active wallet data. It includes data preprocessing, feature analysis, factor filtering, and model forecasting using simple benchmark, SARIMA, ARMA,LSTM models.
 
 ## Table of Contents
 1. [Phase 1 - Decomposition, Feature Analysis & Factor Filtering](#phase-1-decomposition-feature-analysis--factor-filtering)
 2. [Phase 2 - Model](#phase-2---model)
-   - [Benchmark Models]
-   - [SARIMA Seasonal Analysis]
+   - [Benchmark Models](#benchmark-models)
+   - [SARIMA Seasonal Analysis](#sarima-seasonal-analysis)
    - [ARIMA](#ARIMA)
 
 ## Phase 1 - Decomposition, Feature Analysis & Factor Filtering
