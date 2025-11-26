@@ -18,7 +18,7 @@ In this phase, we perform an analysis of Bitcoin price returns and factor filter
 
 ## Phase 2 - Model
 
-Benchmark Models
+# Benchmark Models
 ==============================================
 
 This notebook implements and evaluates three basic time series forecasting methods:
@@ -26,42 +26,56 @@ This notebook implements and evaluates three basic time series forecasting metho
 2. Naive Method
 3. Seasonal Naive Method
 4. Drift Method
-5. 
-Data:
+
+## Data:
 - Bitcoin active wallet data (3-6 months activity)
 - Daily aggregated from 10-minute data
 - Period: 2021-01-01 onwards
-  
-Models Evaluation:
+
+## Models Evaluation:
 - RMSE (Root Mean Square Error)
 - MAE (Mean Absolute Error)
 - MAPE (Mean Absolute Percentage Error)
 - MASE (Mean Absolute Scaled Error)
 
-Required Libraries:
-pandas
-numpy
-matplotlib
-sklearn
+## Required Libraries:
+- pandas
+- numpy
+- matplotlib
+- sklearn
 
-Usage:
+## Usage:
 Run cells sequentially to see the performance comparison of different benchmark models.
 
-### SARIMA Forecasting
-This section involves preprocessing and modeling using SARIMA (Seasonal ARIMA), which accounts for seasonality in the time series data.
+# SARIMA Seasonal Analysis Project
 
-#### 1. SARIMA Data Preprocessing (`SARIMA_data_preprocess.py`):
-- **Preprocessing & Resampling**: Filters and resamples the data to daily frequency and fills missing values.
-- **Seasonal Detection**: Uses ACF to identify seasonal patterns.
-- **Stationarity Check**: Performs ADF test to recommend seasonal differencing `D`.
-- **Visualization**: Plots original series, ACF, STL decomposition, and seasonal strength.
+## Project Overview
+This project uses the SARIMA model to perform time series analysis and seasonal pattern identification on BTC hourly relative profit data.
 
-#### 2. SARIMA Model Fitting (`SARIMA_model_fit.py`):
-- **Preprocessing**: Resamples the data to daily frequency and handles missing values.
-- **Parameter Selection**: Performs coarse and fine grid search for ARIMA parameters.
-- **Rolling Forecast**: Generates step-by-step forecasts for the test set.
-- **Metrics & Diagnostics**: Computes RMSE, MAE, MAPE, MASE, R², AIC, BIC, Ljung-Box, and normality tests.
-- **Visualization**: Saves plots for residual diagnostics, model fit, and forecasts.
+## Main Features
+- Data preprocessing and resampling
+- Time series visualization analysis
+- Stationarity tests (ADF and KPSS tests)
+- Seasonal pattern identification
+- SARIMA model fitting
+
+### 1. Visualization Analysis
+- Original time series plot
+- Data distribution histogram + KDE
+- Autocorrelation Function (ACF) plot
+- Partial Autocorrelation Function (PACF) plot
+
+### 2. Stationarity Tests
+- ADF test (Null hypothesis: Non-stationary)
+- KPSS test (Null hypothesis: Stationary)
+- Comprehensive stationarity judgment
+
+### 3. Model Building
+Using `pmdarima` and `statsmodels` libraries:
+- Automatic SARIMA parameter selection
+- Seasonal pattern identification
+- Model training and validation
+
 
 ### ARIMA
 This project implements an ARIMA-based forecasting pipeline using a daily time series.
