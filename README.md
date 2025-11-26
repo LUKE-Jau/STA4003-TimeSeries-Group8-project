@@ -103,3 +103,37 @@ This project implements an ARIMA-based forecasting pipeline using a daily time s
    - MAE  
    - MAPE  
    - MASE
+  
+LSTM Time-Series Forecast 
+============================================
+
+1. Files
+- Notebook: `LSTM.ipynb`，`LSTM_stop.ipynb`,`LSTM_Hyper.ipynb`
+- Data: `./data/BTC factors/addresses/BTC_1h_profit_relative.csv`
+
+Dataset → Supervised
+- Sliding window (window_size = k): use k previous days to predict next day.
+- LSTM input shape: (batch, seq_len, 1).
+
+2. Model
+- Single-layer LSTM + linear output.
+- Hidden units: 64.
+- Loss: `SmoothL1Loss`.
+- Optimizer: Adam (lr=0.01).
+- Training: full-batch example (epochs in notebook).
+
+3. Inference & Evaluation
+- Inverse-transform predictions to original scale.
+- Metrics: RMSE, MAE, MAPE, MASE.
+- Visualization: Train True / Train Pred / Test True / Test Pred plotted on same axis.
+
+4. Usage
+   1. Execute the `LSTM_Hyper.ipynb` to find the best hyperparameters for the LSTM.
+   2. Then open `LSTM.ipynb` or run the `LSTM_stop.ipynb` which we added the early stopping criteria to ensure the model not overfitting.
+   3. Ensure data path is available.
+   4. Run cells sequentially.
+
+5. Notes
+- Scaler is fitted only on training data to avoid data leakage.
+- For faster experiments reduce epochs or use mini-batches.
+
