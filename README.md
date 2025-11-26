@@ -18,25 +18,34 @@ In this phase, we perform an analysis of Bitcoin price returns and factor filter
 
 ## Phase 2 - Model
 
-### AR(2) Forecasting for BTC Active Wallets
-This section applies an AutoRegressive (AR) model of order 2 (AR(2)) to forecast daily BTC active wallet counts from high-frequency data.
+Benchmark Models
+==============================================
 
-#### Features:
-- Aggregates 10-minute BTC active wallet data into daily averages.
-- Splits the data into training (80%) and testing (20%) sets.
-- Fits an AR(2) model on the training data.
-- Performs one-step-ahead rolling forecasts.
-- Computes forecast metrics: RMSE, MAE, MAPE, MASE.
-- Conducts a Ljung-Box test on residuals for autocorrelation.
-- Visualizes training data, actual test data, and AR(2) forecasts.
+This notebook implements and evaluates three basic time series forecasting methods:
+1. Mean Method
+2. Naive Method
+3. Seasonal Naive Method
+4. Drift Method
+5. 
+Data:
+- Bitcoin active wallet data (3-6 months activity)
+- Daily aggregated from 10-minute data
+- Period: 2021-01-01 onwards
+  
+Models Evaluation:
+- RMSE (Root Mean Square Error)
+- MAE (Mean Absolute Error)
+- MAPE (Mean Absolute Percentage Error)
+- MASE (Mean Absolute Scaled Error)
 
-#### Example Metrics:
-| Metric  | Value   |
-| ------- | ------- |
-| RMSE    | 968,754 |
-| MAE     | 746,357 |
-| MAPE    | 30.14%  |
-| MASE    | 49.46%  |
+Required Libraries:
+pandas
+numpy
+matplotlib
+sklearn
+
+Usage:
+Run cells sequentially to see the performance comparison of different benchmark models.
 
 ### SARIMA Forecasting
 This section involves preprocessing and modeling using SARIMA (Seasonal ARIMA), which accounts for seasonality in the time series data.
