@@ -8,6 +8,7 @@ This project involves various time series analysis methods applied to Bitcoin ac
    - [Benchmark Models](#benchmark-models)
    - [SARIMA Seasonal Analysis](#sarima-seasonal-analysis)
    - [ARIMA](#ARIMA)
+   - [LSTM](#LSTM)
 
 ## Phase 1 - Decomposition, Feature Analysis & Factor Filtering
 In this phase, we perform an analysis of Bitcoin price returns and factor filtering using decomposition methods such as STL, ACF, and PACF.
